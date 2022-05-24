@@ -1,21 +1,14 @@
+from charset import HashByValue, CharSet, TransitionTable
+
+
 NOP = 0
 END = 1
 NEX = 2
 DEFAULT_COPY = False
 
-def extend(seq, *items):
-	for item in items:
-		if item not in seq:
-			seq.add(item)
 
-class Regex:
-	def value(self):
-		pass
-	def __eq__(self, other):
-		return self.value() == other.value()
-	def __hash__(self):
-		return hash(self.value())
-
+class Regex(HashByValue):
+	pass
 
 class Atom(Regex):
 	def __init__(self, char, cursor=False):
@@ -35,8 +28,8 @@ class Atom(Regex):
 		self.cursor = False
 	def __repr__(self):
 		if self.cursor:
-			return self.expr+"_"
-		return self.expr
+			return f"{self.expr}_"
+		return f"{self.expr}"
 
 
 class Epsilon(Regex):
@@ -84,7 +77,7 @@ class Sequence(Regex):
 			expr.reset()
 		self.cursor = 0
 	def __repr__(self):
-		return "["+"".join(f"<{expr}>" if i==self.cursor else f"{expr}" for i, expr in enumerate(self.exprs))+"]"
+		return "("+"".join(f"<{expr}>" if i==self.cursor else f"{expr}" for i, expr in enumerate(self.exprs))+")"
 
 
 class Choice(Regex):
@@ -154,14 +147,6 @@ class Repeat(Regex):
 				result.extend(copy.advance())
 			else:
 				result.append((char, copy, NOP))
-				"""if copy.dirty:
-					result.append((char, copy, NOP))
-				elif self.count < self.min:
-					result.append((char, copy, NOP))
-				else:
-					result.append((char, copy, END))
-					if self.max is None or self.count < self.max:
-						result.append((char, copy, NOP))"""
 		return result
 	def copy(self, deep=DEFAULT_COPY):
 		if deep:
@@ -172,7 +157,7 @@ class Repeat(Regex):
 		self.count = 0
 		self.dirty = False
 	def __repr__(self):
-		return f"({self.expr}){{{self.min},{self.count},{self.max}}}"
+		return f"{self.expr}{{{self.min},{self.count},{self.max}}}"
 
 
 class State(Regex):
@@ -188,7 +173,6 @@ class State(Regex):
 	def value(self):
 		return tuple(self.exprs)
 	def __repr__(self):
-		#return f"\nState {self.id}: {self.valid}"+"".join(f"\n - {expr.value()}" for expr in self.exprs)
 		return f"\nState {self.id}: {self.valid}"+"".join(f"\n - {expr}" for expr in self.exprs)+"".join(f"\n > {char}->{state.id}" for char, state in self.transitions.items())
 
 
@@ -206,28 +190,25 @@ def follow(expr, verbosity=0):
 	while remaining_states:
 		queue_states = set()
 		for state in remaining_states:
-			transitions = {}
+			transitions = TransitionTable()
 			for expr in state.exprs:
 				if verbosity>0: print(">", expr)
 				for char, sub_expr, flag in expr.advance():
 					if verbosity>0: print(char, sub_expr, flag)
-					if char in transitions and sub_expr in transitions[char].exprs:
-						if verbosity>0: print("already visited")
-						if verbosity>1: input()
-						continue
 					if verbosity>1: input()
 					if flag & NEX:
 						state.valid = True
 						continue
-					if char in transitions:
-						transitions[char].exprs.add(sub_expr)
-					else:
-						transitions[char] = State([sub_expr])
+					transitions.insert(char, sub_expr)
 			if verbosity>1: print("transitions:", transitions)
-			for char, sub_state in transitions.items():
+			entries = transitions.entries.items()
+			transitions = {}
+			for char, exprs in entries:
+				sub_state = State(exprs)
 				if sub_state in states:
 					transitions[char] = equivalent(sub_state, states)
 				else:
+					transitions[char] = sub_state
 					states.add(sub_state)
 					queue_states.add(sub_state)
 			state.transitions = transitions
@@ -238,31 +219,3 @@ def follow(expr, verbosity=0):
 			for state in sorted(states, key=lambda s: s.id):
 				print(state)
 	return states
-
-
-#e = Sequence(Atom("a"), Atom("b"), Atom("c"))
-#e = Repeat(Atom("r"), 2, 3)
-#e = Sequence(Atom("a"), Epsilon, Atom("b"), Epsilon, Epsilon, Epsilon)
-
-n=30
-a = Atom("a")
-b = Atom("b")
-c = Atom("c")
-#e = a
-#e = Epsilon
-#e = Repeat(a,0,3)
-#e = Repeat(a,3,4)
-#e = Choice(a,b)
-#e = Sequence(a,a,b)
-#e = Repeat(Choice(a,b))
-#e = Repeat(Sequence(a,Repeat(b,0,0)),0)
-#e = Repeat(Sequence(a,Repeat(b,1)),0)
-#e = Sequence(Repeat(Sequence(a,b),1),a,b)
-#e = Sequence(b,Repeat(Repeat(a,0,1),2,2),b)
-#e = Sequence(b,Repeat(a,0,2),b)
-#e = Sequence(*[Repeat(a,0,1)]*n, *[a]*n)
-e = Sequence(Repeat(Choice(a,b,c),0),a,b)
-print(e)
-states = follow(e)
-for state in sorted(states, key=lambda s: s.id):
-	print(state)
