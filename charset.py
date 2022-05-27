@@ -1,10 +1,12 @@
 class HashByValue:
 	def value(self):
 		pass
+	def _value(self):
+		return (self.__class__, self.value())
 	def __eq__(self, other):
-		return self.value() == other.value()
+		return self._value() == other._value()
 	def __hash__(self):
-		return hash(self.value())
+		return hash(self._value())
 
 
 class CharSet(HashByValue):

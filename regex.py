@@ -160,6 +160,27 @@ class Repeat(Regex):
 		return f"{self.expr}{{{self.min},{self.count},{self.max}}}"
 
 
+class Family(Regex):
+	def __init__(self, expr, id):
+		self.expr = expr
+		self.id = id
+	def value(self):
+		return (self.expr, self.id)
+	def advance(self):
+		result = []
+		for char, sub_expr, flag in self.expr.advance():
+			copy = self.copy()
+			copy.expr = sub_expr
+			result.append((char, copy, flag))
+		return result
+	def copy(self):
+		return Family(self.expr, self.id)
+	def reset(self):
+		self.expr.reset()
+	def __repr__(self):
+		return f"#{self.id} {self.expr}"
+
+
 class State(Regex):
 	current_id = 0
 	def new_id():
@@ -169,11 +190,15 @@ class State(Regex):
 		self.id = State.new_id()
 		self.exprs = set(exprs)
 		self.transitions = transitions or {}
+		self.accept = set()
 		self.valid = False
 	def value(self):
 		return tuple(self.exprs)
 	def __repr__(self):
-		return f"\nState {self.id}: {self.valid}"+"".join(f"\n - {expr}" for expr in self.exprs)+"".join(f"\n > {char}->{state.id}" for char, state in self.transitions.items())
+		return (f"\nState {self.id}: {self.valid}"
+			+"".join(f"\n - {expr}" for expr in self.exprs)
+			+"".join(f"\n + {expr}" for expr in self.accept)
+			+"".join(f"\n {char} -> {state.id}" for char, state in self.transitions.items()))
 
 
 def equivalent(item, seq):
@@ -183,8 +208,11 @@ def equivalent(item, seq):
 	raise ValueError
 
 
-def follow(expr, verbosity=0):
-	first = State([expr])
+def follow(*exprs, verbosity=0):
+	first = State([Family(expr, i) for i, expr in enumerate(exprs)])
+	#first = State(list(exprs))
+	print(first)
+	print("=================================")
 	remaining_states = [first]
 	states = set(remaining_states)
 	while remaining_states:
@@ -198,6 +226,7 @@ def follow(expr, verbosity=0):
 					if verbosity>1: input()
 					if flag & NEX:
 						state.valid = True
+						state.accept.add(expr)
 						continue
 					transitions.insert(char, sub_expr)
 			if verbosity>1: print("transitions:", transitions)
